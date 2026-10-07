@@ -1,98 +1,98 @@
 """
-Modello BEMT per il rotore di Caradonna & Tung in hover.
+BEMT model for the Caradonna & Tung rotor in hover.
 
-Contiene solo i parametri del rotore e le funzioni del modello:
-nessuna stampa e nessun grafico. Le analisi sono in main.py.
+Contains only the rotor parameters and the model functions:
+no printing and no plotting. The analyses are in main.py.
 
-Convenzioni:
-    x      = r/R, posizione adimensionale lungo la pala
-    lambda = v/(Omega*R), velocità indotta adimensionale (positiva verso il basso)
-    theta  = angolo di passo collettivo [rad]
+Conventions:
+    x      = r/R, non-dimensional radial position along the blade
+    lambda = v/(Omega*R), non-dimensional induced velocity (positive downwards)
+    theta  = collective pitch angle [rad]
 """
 import numpy as np
 
 # ---------------------------------------------------------------
-# Parametri del rotore (Caradonna & Tung, NASA TM-81232)
+# Rotor parameters (Caradonna & Tung, NASA TM-81232)
 # ---------------------------------------------------------------
-R = 1.143          # raggio della pala [m]
-CORDA = 0.1905     # corda della pala [m]
-N_PALE = 2         # numero di pale
-RPM = 1250         # velocità di rotazione [giri/min]
-A_SUONO = 340.0    # velocità del suono [m/s]
-X_RADICE = 0.2     # inizio della parte portante della pala (r/R)
-A0 = 5.7           # pendenza della retta di portanza [1/rad]
+R = 1.143          # blade radius [m]
+CORDA = 0.1905     # blade chord [m]
+N_PALE = 2         # number of blades
+RPM = 1250         # rotational speed [rpm]
+A_SUONO = 340.0    # speed of sound [m/s]
+X_RADICE = 0.2     # start of the lifting part of the blade (r/R)
+A0 = 5.7           # lift-curve slope [1/rad]
 
-OMEGA = RPM * 2 * np.pi / 60              # velocità angolare [rad/s]
-SIGMA = N_PALE * CORDA / (np.pi * R)      # solidità del rotore
+OMEGA = RPM * 2 * np.pi / 60              # angular velocity [rad/s]
+SIGMA = N_PALE * CORDA / (np.pi * R)      # rotor solidity
 
-# Parametri dell'iterazione di punto fisso
+# Fixed-point iteration parameters
 TOL = 1e-8
 MAX_IT = 100
 
 
 # ---------------------------------------------------------------
-# Griglie radiali
+# Radial grids
 # ---------------------------------------------------------------
 def griglia_uniforme(N, x_radice=X_RADICE):
-    """N stazioni equispaziate tra la radice e la punta."""
+    """N equally spaced stations between the root and the tip."""
     return np.linspace(x_radice, 1.0, N)
 
 
 def griglia_semicoseno(N, x_radice=X_RADICE):
-    """N stazioni a semi-coseno: più fitte verso la punta, dove il carico
-    scende a zero come sqrt(1-x) per effetto del fattore di Prandtl."""
+    """N half-cosine stations, clustered towards the tip, where the loading
+    drops to zero as sqrt(1-x) because of the Prandtl tip-loss factor."""
     beta = np.linspace(0, np.pi / 2, N)
     return x_radice + (1.0 - x_radice) * np.sin(beta)
 
 
 # ---------------------------------------------------------------
-# Funzioni di servizio
+# Helper functions
 # ---------------------------------------------------------------
 def coefficiente_spinta(x, lam, F=1.0):
-    """C_T integrando il bilancio della quantità di moto: dC_T = 4 F lambda^2 x dx."""
+    """Thrust coefficient from the momentum balance: dC_T = 4 F lambda^2 x dx."""
     return np.trapezoid(4 * F * lam**2 * x, x)
 
 
 def errore_pct(modello, esperimento):
-    """Errore percentuale (positivo = il modello sovrastima)."""
+    """Percentage error (positive = the model overpredicts)."""
     return (modello - esperimento) / esperimento * 100
 
 
 def _radice_stabile(A, B, C):
-    """Radice positiva di A*lam^2 + B*lam + C = 0 nella forma -2C/(B + sqrt(B^2 - 4AC)).
-    È equivalente alla formula classica, ma resta definita anche per A = 0
-    (alla punta, dove il fattore di Prandtl F vale zero)."""
+    """Positive root of A*lam^2 + B*lam + C = 0, written as -2C/(B + sqrt(B^2 - 4AC)).
+    Algebraically equivalent to the standard formula, but still defined for A = 0
+    (at the tip, where the Prandtl factor F vanishes)."""
     return -2 * C / (B + np.sqrt(B**2 - 4 * A * C))
 
 
 def _fattore_prandtl(x, lam):
-    """Fattore di perdita d'estremità di Prandtl (hover, phi ~ lambda/x)."""
+    """Prandtl tip-loss factor (hover, phi ~ lambda/x)."""
     f = (N_PALE / 2) * (1 - x) / lam
     return (2 / np.pi) * np.arccos(np.exp(-f))
 
 
 # ---------------------------------------------------------------
-# Modelli
+# Models
 # ---------------------------------------------------------------
 def inflow_uniforme(theta, a=A0):
-    """Teoria dell'elemento di pala + disco attuatore con inflow uniforme.
-    C_T = (sigma*a/2)(theta/3 - lambda/2) e C_T = 2 lambda^2.
-    Nota: questa formula integra da x = 0 a x = 1, senza radice e senza Prandtl."""
+    """Blade element theory + actuator disk with uniform inflow.
+    C_T = (sigma*a/2)(theta/3 - lambda/2) and C_T = 2 lambda^2.
+    Note: this formula integrates from x = 0 to x = 1, without root cut-out or Prandtl."""
     lam = _radice_stabile(2.0, SIGMA * a / 4, -SIGMA * a * theta / 6)
     return lam, 2 * lam**2
 
 
 def bemt_senza_perdite(x, theta, a=A0):
-    """BEMT per anelli senza perdite d'estremità (soluzione in forma chiusa):
+    """Annular BEMT without tip loss (closed-form solution):
     lambda^2 + (sigma*a/8) lambda - (sigma*a/8) theta x = 0."""
     return _radice_stabile(1.0, SIGMA * a / 8, -SIGMA * a / 8 * theta * x)
 
 
 def bemt_prandtl(x, theta, a=A0, tol=TOL, max_it=MAX_IT):
-    """BEMT con perdite d'estremità di Prandtl, risolto per punto fisso:
+    """BEMT with Prandtl tip loss, solved by fixed-point iteration:
     F lambda^2 + (sigma*a/8) lambda - (sigma*a/8) theta x = 0.
-    Gli anelli sono indipendenti: si può valutare anche su punti isolati.
-    Restituisce lambda, F e il numero di iterazioni."""
+    Annuli are independent, so the model can also be evaluated at isolated points.
+    Returns lambda, F and the number of iterations."""
     F = np.ones_like(x)
     lam_old = np.zeros_like(x)
     for it in range(1, max_it + 1):
@@ -101,32 +101,32 @@ def bemt_prandtl(x, theta, a=A0, tol=TOL, max_it=MAX_IT):
         if np.max(np.abs(lam - lam_old)) < tol:
             return lam, F, it
         lam_old = lam
-    print("ATTENZIONE: bemt_prandtl non ha raggiunto la convergenza")
+    print("WARNING: bemt_prandtl did not converge")
     return lam, F, it
 
 
 def bemt_vortice(x, theta, r_v, z_v, k=1.0, r_c=0.0, usa_prandtl=True,
                  togli_media=False, comprimibile=False, tol=TOL, max_it=MAX_IT):
-    """BEMT con Prandtl e correzione per il vortice d'estremità della pala precedente.
+    """BEMT with Prandtl tip loss and a correction for the tip vortex of the preceding blade.
 
-    Il vortice (età 180°) è modellato come vortice rettilineo 2D nel piano (r, z)
-    della pala, posto in (r_v, z_v) sotto il disco, con intensità k*Gamma_max.
-    La componente verticale indotta (Biot-Savart) entra solo nella parte delle pale:
+    The vortex (age 180 deg) is modelled as a straight 2D line vortex in the (r, z) plane
+    of the blade, located at (r_v, z_v) below the disk, with strength k*Gamma_max.
+    Its vertical induced velocity (Biot-Savart) enters the blade-element side only:
         F lambda^2 + (sigma*a/8) lambda - (sigma*a/8)(theta x - lambda_v) = 0
         lambda_v = -k Gamma_max (x - r_v) / (2 pi (d^2 + r_c^2) Omega R^2)
-    Gamma_max dipende dalla soluzione, quindi tutto è risolto per punto fisso.
+    Gamma_max depends on the solution, so everything is solved by fixed-point iteration.
 
-    ATTENZIONE: Gamma_max è il massimo su tutta la pala, quindi la funzione va
-    chiamata sulla griglia completa (per i punti sperimentali usare np.interp).
+    WARNING: Gamma_max is the maximum over the whole blade, so the function must be
+    called on the full grid (use np.interp to evaluate at the experimental stations).
 
-    Opzioni (tutte disattivate di default):
-        k            intensità del vortice / circolazione massima della pala
-        r_c          raggio del nucleo viscoso adimensionale (modello di Scully)
-        usa_prandtl  False per il test senza fattore di Prandtl
-        togli_media  True per togliere a lambda_v il suo valore medio sul disco
-        comprimibile True per la correzione di Prandtl-Glauert sulla pendenza
+    Options (all off by default):
+        k            vortex strength / maximum bound circulation of the blade
+        r_c          non-dimensional viscous core radius (Scully model)
+        usa_prandtl  False for the test without the Prandtl factor
+        togli_media  True to remove the disk-averaged value of lambda_v
+        comprimibile True for the Prandtl-Glauert correction of the lift-curve slope
 
-    Restituisce lambda, Cl, F, Gamma_max [m^2/s] e il numero di iterazioni."""
+    Returns lambda, Cl, F, Gamma_max [m^2/s] and the number of iterations."""
     a = A0
     if comprimibile:
         M_loc = OMEGA * x * R / A_SUONO
@@ -153,10 +153,10 @@ def bemt_vortice(x, theta, r_v, z_v, k=1.0, r_c=0.0, usa_prandtl=True,
             return lam, Cl, F, gamma_max, it
         lam_old = lam
 
-    print("ATTENZIONE: bemt_vortice non ha raggiunto la convergenza")
+    print("WARNING: bemt_vortice did not converge")
     return lam, Cl, F, gamma_max, it
 
 
 def cl_prandtl(x, theta, lam, a=A0):
-    """Cl di sezione dei modelli senza vortice: Cl = a (theta - lambda/x)."""
+    """Sectional Cl of the models without vortex: Cl = a (theta - lambda/x)."""
     return a * (theta - lam / x)

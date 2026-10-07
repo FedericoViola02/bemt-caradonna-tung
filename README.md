@@ -123,7 +123,7 @@ The consistent way to remove the double counting is to drop momentum theory and 
 | `dati_sperimentali.py` | Experimental data from NASA TM-81232, with the figure each value comes from |
 | `main.py` | All analyses in sequence; figures are saved in `figure/` |
 
-Code comments are in Italian.
+Comments, printed output and figure labels are in English; function and variable names are in Italian.
 
 ### How to run
 
