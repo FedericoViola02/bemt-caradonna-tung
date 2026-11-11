@@ -20,6 +20,8 @@ from modello import (R, OMEGA, A_SUONO, griglia_uniforme, griglia_semicoseno,
                      coefficiente_spinta, errore_pct, inflow_uniforme,
                      bemt_senza_perdite, bemt_prandtl, bemt_vortice, cl_prandtl)
 from dati_sperimentali import X_STAZIONI, CASI, K_VORTICE_5
+from stile_figure import (applica_stile, stile_modello, stile_esperimento,
+                          INCHIOSTRO, INCHIOSTRO_2, GRIGIO_ASSI, GRIGLIA)
 
 # Main grid: half-cosine with 200 stations (chosen from the study in section 5)
 x = griglia_semicoseno(200)
@@ -164,83 +166,82 @@ for th_deg, caso in CASI.items():
         stampa_risultato(f"  Vortex, k = {K_VORTICE_5}", coefficiente_spinta(x, lam_k, F_k), caso["CT"])
 
 
-# %% 9. Figures
+# %% 9. Figures (shared style: same color for the same model in every figure)
+applica_stile()
 os.makedirs("figure", exist_ok=True)
 
 # Local Mach number along the blade
 plt.figure()
-plt.plot(x, OMEGA * x * R / A_SUONO)
+plt.plot(x, OMEGA * x * R / A_SUONO, color=INCHIOSTRO)
 plt.xlabel("r/R")
 plt.ylabel("Local Mach number")
 plt.title("Local Mach number along the blade")
-plt.grid()
 plt.tight_layout()
 plt.savefig("figure/mach.png", dpi=200)
 
 # Spanwise loading at 8 deg
 plt.figure()
-plt.plot(x, 4 * lam_sp**2 * x, label="BEMT without tip loss")
-plt.plot(x, 4 * F_pr * lam_pr**2 * x, label="BEMT with Prandtl")
-plt.plot(x, 4 * F_v * lam_v**2 * x, label="BEMT with tip vortex")
+plt.plot(x, 4 * lam_sp**2 * x, **stile_modello("senza_perdite"))
+plt.plot(x, 4 * F_pr * lam_pr**2 * x, **stile_modello("prandtl"))
+plt.plot(x, 4 * F_v * lam_v**2 * x, **stile_modello("v1"))
 plt.xlabel("r/R")
 plt.ylabel("dC_T/dx")
 plt.title("Spanwise loading, θ = 8°")
 plt.legend()
-plt.grid()
 plt.tight_layout()
 plt.savefig("figure/carico_8deg.png", dpi=200)
 
 # Sectional Cl along the blade at 8 deg
 plt.figure()
-plt.plot(x, cl_prandtl(x, theta8, lam_sp), label="BEMT without tip loss")
-plt.plot(x, cl_prandtl(x, theta8, lam_pr), label="BEMT with Prandtl")
-plt.plot(x, Cl_v, label="BEMT with tip vortex")
-plt.plot(X_STAZIONI, caso8["Cl"], "o", label="Experiment")
+plt.plot(x, cl_prandtl(x, theta8, lam_sp), **stile_modello("senza_perdite"))
+plt.plot(x, cl_prandtl(x, theta8, lam_pr), **stile_modello("prandtl"))
+plt.plot(x, Cl_v, **stile_modello("v1"))
+plt.plot(X_STAZIONI, caso8["Cl"], **stile_esperimento())
 plt.xlabel("r/R")
 plt.ylabel("Cl")
 plt.title("Sectional lift coefficient, θ = 8°")
 plt.legend()
-plt.grid()
 plt.tight_layout()
 plt.savefig("figure/cl_8deg.png", dpi=200)
 
 # C_T versus collective pitch
 plt.figure()
 th_lista = list(CASI.keys())
-plt.plot(theta_curva, CT_curva, label="BEMT with Prandtl")
-plt.plot(th_lista, [risultati[t]["CT_v"] for t in th_lista], "s", label="BEMT with tip vortex")
-plt.plot(th_lista, [CASI[t]["CT"] for t in th_lista], "x", ms=8, label="Experiment")
+plt.plot(theta_curva, CT_curva, **stile_modello("prandtl"))
+plt.plot(th_lista, [risultati[t]["CT_v"] for t in th_lista], marker="s",
+         **{**stile_modello("v1"), "ls": "none"})
+plt.plot(th_lista, [CASI[t]["CT"] for t in th_lista], **stile_esperimento())
 plt.xlabel("θ [°]")
 plt.ylabel("C_T")
 plt.title("Thrust coefficient versus collective pitch")
 plt.legend()
-plt.grid()
 plt.tight_layout()
 plt.savefig("figure/ct_theta.png", dpi=200)
 
-# Grid convergence study
+# Grid convergence study (numerics: ink, distinguished by marker and line style)
 plt.figure()
-plt.loglog(lista_N, err_uni, "o-", label="Uniform grid")
-plt.loglog(lista_N, err_cos, "s-", label="Half-cosine grid")
-plt.loglog(lista_N, err_uni[0] * (lista_N / lista_N[0])**-1.5, "k--", lw=0.8, label="slope -1.5")
-plt.loglog(lista_N, err_uni[0] * (lista_N / lista_N[0])**-2, "k:", lw=0.8, label="slope -2")
+plt.loglog(lista_N, err_uni, "o--", color=INCHIOSTRO_2, label="Uniform grid")
+plt.loglog(lista_N, err_cos, "s-", color=INCHIOSTRO, label="Half-cosine grid")
+plt.loglog(lista_N, err_uni[0] * (lista_N / lista_N[0])**-1.5, "--", color=GRIGIO_ASSI,
+           lw=0.8, label="slope -1.5")
+plt.loglog(lista_N, err_uni[0] * (lista_N / lista_N[0])**-2, ":", color=GRIGIO_ASSI,
+           lw=0.8, label="slope -2")
 plt.xlabel("Number of stations N")
 plt.ylabel("Relative error on C_T")
 plt.title("Convergence of the C_T integral")
 plt.legend()
-plt.grid(True, which="both", alpha=0.3)
+plt.grid(True, which="minor", color=GRIGLIA, lw=0.4)
 plt.tight_layout()
 plt.savefig("figure/convergenza.png", dpi=200)
 
 # Validation: Cl distribution at the three angles
 fig, assi = plt.subplots(1, 3, figsize=(13, 4))
 for ax, th_deg in zip(assi, CASI):
-    ax.plot(x, risultati[th_deg]["Cl_pr"], label="BEMT with Prandtl")
-    ax.plot(x, risultati[th_deg]["Cl_v"], label="BEMT with tip vortex")
-    ax.plot(X_STAZIONI, CASI[th_deg]["Cl"], "o", label="Experiment")
+    ax.plot(x, risultati[th_deg]["Cl_pr"], **stile_modello("prandtl"))
+    ax.plot(x, risultati[th_deg]["Cl_v"], **stile_modello("v1"))
+    ax.plot(X_STAZIONI, CASI[th_deg]["Cl"], **stile_esperimento())
     ax.set_title(f"θ = {th_deg}°")
     ax.set_xlabel("r/R")
-    ax.grid()
 assi[0].set_ylabel("Cl")
 assi[0].legend()
 fig.tight_layout()
